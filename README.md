@@ -109,6 +109,18 @@ chmod +x run.sh
 
 ## Running
 
+### Docker (HTTP/SSE)
+
+Create `.env` from `.env.example`, then set `MCP_API_KEY` and Gatekeeperd credentials. Start the container with:
+
+```bash
+docker compose up -d --build
+```
+
+The MCP server listens on `http://localhost:9000/sse`; requests must include `Authorization: Bearer <MCP_API_KEY>`. The port is bound to localhost by default. To use a Gatekeeperd instance running on the Docker host, set `GATEKEEPERD_URL=http://host.docker.internal:8080/api` in `.env`. For a remote Gatekeeperd server, set its reachable URL instead.
+
+Stop the container with `docker compose down`.
+
 ### stdio (default — for Bob / local use)
 
 Bob spawns the server automatically once registered in `mcp.json`. No manual start needed.
@@ -266,9 +278,6 @@ JWTs issued by Gatekeeperd expire after 24 hours. Using credentials is recommend
 ---
 
 ## Security Notes
-
-- **Never commit `.env`** — add it to `.gitignore`
-- **`.env.example`** is the safe shareable template; it contains no real values
 - `MCP_API_KEY` is only enforced when `MCP_TRANSPORT=http`; stdio connections are process-level isolated
 - `streamable-http` tokens are in-memory only; a server restart forces a fresh OAuth consent
 - Registry credential passwords stored in Gatekeeperd are AES-256-GCM encrypted at rest and never returned by the API
