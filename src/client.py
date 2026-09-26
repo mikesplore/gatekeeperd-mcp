@@ -93,6 +93,11 @@ async def apatch(path: str, body: dict[str, Any]) -> Any:
     return r.json()
 
 
+async def aput(path: str, body: dict[str, Any]) -> Any:
+    r = await _request("PUT", path, json=body)
+    return r.json()
+
+
 async def adelete(path: str) -> int:
     r = await _request("DELETE", path)
     return r.status_code

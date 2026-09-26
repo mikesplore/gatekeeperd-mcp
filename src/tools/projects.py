@@ -2,12 +2,62 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 import client as gk
 from utils import ok, err
 from mcp.server.fastmcp import FastMCP
 
 
 def register(mcp: FastMCP) -> None:
+
+    @mcp.tool()
+    async def create_project_setup(slug: str, name: str, domain: str, project_type: str = "frontend", customer_id: str | None = None) -> str:
+        """Create a project without a container; source, credentials, gateway, and deployment can follow later."""
+        try:
+            body: dict[str, Any] = {"slug": slug, "name": name, "domain": domain, "type": project_type}
+            if customer_id:
+                body["customerId"] = customer_id
+            return ok(await gk.apost("/admin/project-setup/projects", body))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def configure_project_setup_source(
+        project_id: str, repository: str, image_name: str, container_port: int,
+        git_ref: str = "main", registry: str = "docker.io", image_tag: str = "latest",
+        host_port: int | None = None, network: str = "bridge", restart_policy: str = "unless-stopped",
+    ) -> str:
+        """Save or update project source/runtime intent without accepting secret values."""
+        try:
+            body: dict[str, Any] = {
+                "repository": repository, "gitRef": git_ref, "registry": registry,
+                "imageName": image_name, "imageTag": image_tag, "containerPort": container_port,
+                "network": network, "restartPolicy": restart_policy, "environment": "production",
+            }
+            if host_port is not None:
+                body["hostPort"] = host_port
+            return ok(await gk.aput(f"/admin/project-setup/projects/{quote(project_id, safe='')}/source-runtime", body))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def configure_project_setup_domain(project_id: str, domain: str, tls_mode: str = "http_only", gate_enabled: bool = True) -> str:
+        """Save project domain and gateway intent, including before a runtime is deployed."""
+        try:
+            return ok(await gk.aput(f"/admin/project-setup/projects/{quote(project_id, safe='')}/domain-gateway", {
+                "domain": domain, "tlsMode": tls_mode, "gateEnabled": gate_enabled,
+            }))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def deploy_project_setup(project_id: str) -> str:
+        """Queue deployment from the project's saved source/runtime configuration."""
+        try:
+            response = await gk.apost(f"/admin/project-setup/projects/{quote(project_id, safe='')}/deploy")
+            return ok({key: response.get(key) for key in ("deploymentId", "status")})
+        except Exception as e:
+            return err(e)
 
     @mcp.tool()
     async def list_projects(search: str = "", status: str = "", limit: int = 100, offset: int = 0) -> str:

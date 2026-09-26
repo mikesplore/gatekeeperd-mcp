@@ -7,13 +7,27 @@ from utils import ok, err
 from mcp.server.fastmcp import FastMCP
 
 
+CONTAINER_FIELDS = {
+    "id", "name", "image", "status", "state", "ports", "created", "networks",
+    "environmentKeys", "health", "restartCount", "oomKilled",
+}
+
+
+def _safe_container(item: dict[str, Any]) -> dict[str, Any]:
+    return {key: item[key] for key in CONTAINER_FIELDS if key in item}
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def list_containers(limit: int = 50, offset: int = 0) -> str:
         """List all Docker containers (running and stopped) on the host."""
         try:
-            return ok(await gk.aget("/admin/containers", {"limit": limit, "offset": offset}))
+            data = await gk.aget("/admin/containers", {"limit": limit, "offset": offset})
+            return ok({
+                "containers": [_safe_container(item) for item in data.get("containers", []) if isinstance(item, dict)],
+                "total": data.get("total"), "limit": data.get("limit"), "offset": data.get("offset"),
+            })
         except Exception as e:
             return err(e)
 
@@ -21,15 +35,8 @@ def register(mcp: FastMCP) -> None:
     async def get_container(name: str) -> str:
         """Get details for a single Docker container by name or ID prefix."""
         try:
-            return ok(await gk.aget(f"/admin/containers/{name}"))
-        except Exception as e:
-            return err(e)
-
-    @mcp.tool()
-    async def get_container_logs(name: str, tail: int = 100) -> str:
-        """Fetch the last N log lines from a container."""
-        try:
-            return ok(await gk.aget(f"/admin/containers/{name}/logs", {"tail": tail}))
+            data = await gk.aget(f"/admin/containers/{name}")
+            return ok(_safe_container(data) if isinstance(data, dict) else {})
         except Exception as e:
             return err(e)
 

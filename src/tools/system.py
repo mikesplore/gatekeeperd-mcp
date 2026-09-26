@@ -71,7 +71,19 @@ def register(mcp: FastMCP) -> None:
         password: registry password or access token
         """
         try:
-            return ok(await gk.apost(f"/admin/registries/{registry}", {"username": username, "password": password}))
+            response = await gk.aput(f"/admin/registries/{registry}", {"username": username, "password": password})
+            return ok({key: response.get(key) for key in ("credentialId", "version", "configured")})
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def rotate_github_credential(credential_type: str, value: str) -> str:
+        """Write a new GitHub webhook-secret or App private-key version; never returns the value."""
+        if credential_type not in ("webhook_secret", "app_private_key"):
+            return err(ValueError("credential_type must be webhook_secret or app_private_key"))
+        try:
+            response = await gk.aput(f"/admin/github/credentials/{credential_type}", {"value": value})
+            return ok({key: response.get(key) for key in ("id", "type", "configured", "version", "writeOnly")})
         except Exception as e:
             return err(e)
 
