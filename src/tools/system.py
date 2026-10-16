@@ -55,6 +55,14 @@ def register(mcp: FastMCP) -> None:
             return err(e)
 
     @mcp.tool()
+    async def get_backend_version() -> str:
+        """Read the public Gatekeeperd version endpoint without admin credentials."""
+        try:
+            return ok(await gk.aget("/version"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
     async def list_registries() -> str:
         """List configured Docker registry credentials (passwords are never returned)."""
         try:

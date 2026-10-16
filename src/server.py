@@ -33,7 +33,7 @@ import client as gk
 
 from mcp.server.fastmcp import FastMCP
 
-from tools import auth, projects, payments, invoices, containers, deployments, nginx, customers, audit, system
+from tools import auth, projects, payments, invoices, containers, deployments, nginx, customers, audit, system, operations
 
 # ── Server instance ───────────────────────────────────────────────────────────
 mcp = FastMCP(
@@ -57,6 +57,7 @@ nginx.register(mcp)
 customers.register(mcp)
 audit.register(mcp)
 system.register(mcp)
+operations.register(mcp)
 
 
 # ── Startup auth ──────────────────────────────────────────────────────────────
@@ -183,6 +184,7 @@ def _build_oauth_mcp() -> "FastMCP":
     customers.register(oauth_mcp)
     audit.register(oauth_mcp)
     system.register(oauth_mcp)
+    operations.register(oauth_mcp)
 
     return oauth_mcp, provider
 

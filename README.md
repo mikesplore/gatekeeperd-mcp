@@ -6,7 +6,7 @@ MCP (Model Context Protocol) server for the [Gatekeeperd](https://github.com/mik
 
 ## Features
 
-- **83 tools** across 10 domains — every major Gatekeeperd operation is covered
+- **Tools across 11 domains** — project, payment, deployment, runtime, container, Nginx, certificate, and operations workflows
 - **Auto-login at startup** — provide admin credentials in `.env` and a fresh JWT is obtained automatically on every start
 - **Three transports** — `stdio` for Bob, `http/SSE` for legacy remote clients, `streamable-http` for Claude.ai web
 - **API key protection** — when running over HTTP/SSE, all requests require `Authorization: Bearer <MCP_API_KEY>`
@@ -34,11 +34,12 @@ gatekeeperd-mcp/
 │       ├── payments.py   # initialize, cash capture, list, reconcile, events, revenue
 │       ├── invoices.py   # create, resync, download invoice PDF, download receipt PDF
 │       ├── containers.py # create, start/stop/restart/delete, logs, images, wizard
-│       ├── deployments.py# queue, cancel, retry, rollback, image prune
-│       ├── nginx.py      # enable/disable/remove sites, certs, config, wizard
+│       ├── deployments.py# deployment history, deploy, redeploy, rollback, image prune
+│       ├── operations.py # backend logs, version, runtime port mappings, reconciliation
+│       ├── nginx.py      # enable/disable/remove sites, custom locations, certs, config
 │       ├── customers.py  # list, get, create, assign to project
 │       ├── audit.py      # global log, per-project log, CSV export
-│       └── system.py     # dashboard, notifications, metrics, registry credentials
+│       └── system.py     # dashboard, notifications, metrics, version, registry credentials
 └── .venv/                # Python virtual environment (created during setup)
 ```
 
@@ -246,18 +247,23 @@ Bob hot-reloads the server on config save. Once connected you can ask things lik
 
 ## Tool Reference
 
+Deployment tools now use Gatekeeperd's project setup API. Configure desired source/runtime settings first, then queue a deployment by project ID. Runtime inspection reports recorded container-to-host port mappings, including ready candidates waiting for Nginx cutover. Managed deployments use stable, Gatekeeperd-allocated loopback ports; do not change container ports manually to chase a moving Docker mapping.
+
+Use `get_gatekeeperd_logs` to inspect the authenticated, redacted journal endpoint. For a deployment that is Ready but not Active, inspect its runtime, logs, and reconciliation report before taking action. `repair_deployment_nginx_upstream` is an explicit mutation that points a managed site at its active runtime and probes it through Nginx.
+
 | Module | Tools |
 |---|---|
 | **auth** | `login` `logout` `get_current_user` |
 | **projects** | `list_projects` `get_project` `get_project_health` `create_project` `update_project` `block_project` `unblock_project` `archive_project` `transfer_project` `bulk_block_projects` `bulk_unblock_projects` `get_overdue_projects` `add_project_adjustment` `update_deployment_source` `get_project_wizard_context` `gate_check` |
 | **payments** | `initialize_payment` `record_cash_payment` `list_payments` `list_project_payments` `reconcile_payment` `list_payment_events` `replay_payment_event` `get_revenue_report` |
 | **invoices** | `get_project_invoice` `create_project_invoice` `resync_project_invoice` `download_invoice` `download_payment_receipt` |
-| **containers** | `list_containers` `get_container` `get_container_logs` `start_container` `stop_container` `restart_container` `delete_container` `create_container` `validate_container_create` `check_ports_availability` `get_container_wizard_context` `check_image_exists` `pull_image` `delete_image` `list_networks` |
-| **deployments** | `list_deployments` `get_deployment` `create_deployment` `cancel_deployment` `retry_deployment` `rollback_deployment` `get_deployment_audit` `prune_docker_images` |
-| **nginx** | `get_nginx_status` `enable_nginx_site` `disable_nginx_site` `remove_nginx_site` `get_nginx_config` `run_nginx_diagnostics` `rollback_nginx_config` `list_nginx_config_versions` `get_nginx_wizard_context` `list_certificates` `install_certificate` `remove_certificate` `check_certificate_status` |
+| **containers** | `list_containers` `get_container` `get_container_credentials` `get_container_logs` `start_container` `stop_container` `restart_container` `delete_container` `create_container` `validate_container_create` `check_ports_availability` `get_container_wizard_context` `check_image_exists` `pull_image` `delete_image` `list_networks` |
+| **deployments** | `get_project_deployment_history` `get_project_deployment` `create_deployment` `redeploy_project` `rollback_project_deployment` `rotate_project_secrets_and_redeploy` `list_provider_credential_references` `prune_docker_images` |
+| **operations** | `get_gatekeeperd_logs` `get_project_service_runtime` `get_deployment_reconciliation` |
+| **nginx** | `get_nginx_status` `enable_nginx_site` `disable_nginx_site` `remove_nginx_site` `get_nginx_config` `add_custom_nginx_location` `remove_custom_nginx_location` `run_nginx_diagnostics` `rollback_nginx_config` `list_nginx_config_versions` `get_nginx_wizard_context` `list_certificates` `install_certificate` `renew_certificate` `remove_certificate` `check_certificate_status` `repair_deployment_nginx_upstream` |
 | **customers** | `list_customers` `get_customer` `create_customer` `assign_customer_to_project` |
 | **audit** | `get_audit_log` `get_project_audit_log` `export_audit_log` |
-| **system** | `get_dashboard_summary` `list_notifications` `get_metrics` `health_check` `health_ready` `list_registries` `upsert_registry_credential` `delete_registry_credential` |
+| **system** | `get_dashboard_summary` `list_notifications` `get_metrics` `health_check` `health_ready` `get_backend_version` `list_registries` `upsert_registry_credential` `delete_registry_credential` |
 
 ---
 

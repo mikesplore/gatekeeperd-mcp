@@ -11,19 +11,30 @@ from mcp.server.fastmcp import FastMCP
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def create_project_setup(slug: str, name: str, domain: str, project_type: str = "frontend", customer_id: str | None = None) -> str:
-        """Create a project without a container; source, credentials, gateway, and deployment can follow later."""
+    async def create_project_setup(
+        name: str,
+        customer_id: str,
+        domain: str | None = None,
+        project_type: str = "frontend",
+        amount_due: float | None = None,
+        currency: str = "KES",
+        due_date: str | None = None,
+        grace_period_days: int | None = None,
+    ) -> str:
+        """Create a project; Gatekeeperd generates its slug. Domain and billing fields are optional."""
         try:
-            body: dict[str, Any] = {"slug": slug, "name": name, "domain": domain, "type": project_type}
-            if customer_id:
-                body["customerId"] = customer_id
+            body: dict[str, Any] = {"name": name, "customerId": customer_id, "type": project_type, "currency": currency}
+            if domain: body["domain"] = domain
+            if amount_due is not None: body["amountDue"] = amount_due
+            if due_date: body["dueDate"] = due_date
+            if grace_period_days is not None: body["gracePeriodDays"] = grace_period_days
             return ok(await gk.apost("/admin/project-setup/projects", body))
         except Exception as e:
             return err(e)
 
     @mcp.tool()
     async def configure_project_setup_source(
-        project_id: str, repository: str, image_name: str, container_port: int,
+        project_id: str, image_name: str, repository: str | None = None, container_port: int | None = None,
         git_ref: str = "main", registry: str = "docker.io", image_tag: str = "latest",
         host_port: int | None = None, network: str = "bridge", restart_policy: str = "unless-stopped",
     ) -> str:
@@ -31,9 +42,13 @@ def register(mcp: FastMCP) -> None:
         try:
             body: dict[str, Any] = {
                 "repository": repository, "gitRef": git_ref, "registry": registry,
-                "imageName": image_name, "imageTag": image_tag, "containerPort": container_port,
+                "imageName": image_name, "imageTag": image_tag,
                 "network": network, "restartPolicy": restart_policy, "environment": "production",
             }
+            if container_port is not None:
+                body["containerPort"] = container_port
+            if repository:
+                body["repository"] = repository
             if host_port is not None:
                 body["hostPort"] = host_port
             return ok(await gk.aput(f"/admin/project-setup/projects/{quote(project_id, safe='')}/source-runtime", body))
@@ -41,12 +56,13 @@ def register(mcp: FastMCP) -> None:
             return err(e)
 
     @mcp.tool()
-    async def configure_project_setup_domain(project_id: str, domain: str, tls_mode: str = "http_only", gate_enabled: bool = True) -> str:
-        """Save project domain and gateway intent, including before a runtime is deployed."""
+    async def configure_project_setup_domain(project_id: str, domain: str, service_id: str | None = None) -> str:
+        """Save a service domain. Configure or enable its Nginx site separately."""
         try:
-            return ok(await gk.aput(f"/admin/project-setup/projects/{quote(project_id, safe='')}/domain-gateway", {
-                "domain": domain, "tlsMode": tls_mode, "gateEnabled": gate_enabled,
-            }))
+            body: dict[str, Any] = {"domain": domain}
+            if service_id:
+                body["serviceId"] = service_id
+            return ok(await gk.aput(f"/admin/project-setup/projects/{quote(project_id, safe='')}/domain-gateway", body))
         except Exception as e:
             return err(e)
 

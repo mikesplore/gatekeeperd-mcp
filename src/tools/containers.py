@@ -41,6 +41,14 @@ def register(mcp: FastMCP) -> None:
             return err(e)
 
     @mcp.tool()
+    async def get_container_credentials(name: str) -> str:
+        """Retrieve saved database or Redis preset credentials. Treat the returned password as a secret."""
+        try:
+            return ok(await gk.aget(f"/admin/containers/{name}/credentials"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
     async def start_container(name: str) -> str:
         """Start a stopped Docker container."""
         try:

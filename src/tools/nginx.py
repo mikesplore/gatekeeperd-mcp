@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 import client as gk
 from utils import ok, err
 from mcp.server.fastmcp import FastMCP
@@ -152,5 +153,43 @@ def register(mcp: FastMCP) -> None:
         """Check whether a Let's Encrypt certificate is installed for a domain."""
         try:
             return ok(await gk.aget(f"/admin/nginx/certificate/status/{domain}"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def renew_certificate(domain: str) -> str:
+        """Renew an installed Certbot certificate. Check Gatekeeperd logs if renewal fails."""
+        try:
+            return ok(await gk.apost(f"/admin/nginx/certificate/renew/{domain}"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def add_custom_nginx_location(slug: str, path: str, directives: str) -> str:
+        """Add a validated application-specific Nginx location while preserving Gatekeeper auth and paywall blocks."""
+        try:
+            return ok(await gk.apost(
+                f"/admin/nginx/config/{quote(slug, safe='')}/custom-blocks",
+                {"path": path, "directives": directives},
+            ))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def remove_custom_nginx_location(slug: str, location_id: str) -> str:
+        """Remove one saved custom Nginx location by its returned ID."""
+        try:
+            status = await gk.adelete(
+                f"/admin/nginx/config/{quote(slug, safe='')}/custom-blocks/{quote(location_id, safe='')}"
+            )
+            return ok({"removed": 200 <= status < 300, "status_code": status})
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def repair_deployment_nginx_upstream(service_id: str) -> str:
+        """Explicitly point a deployment-managed Nginx site at its active runtime and verify it through Nginx."""
+        try:
+            return ok(await gk.apost(f"/admin/nginx/upstream-repair/{quote(service_id, safe='')}"))
         except Exception as e:
             return err(e)

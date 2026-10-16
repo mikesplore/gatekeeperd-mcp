@@ -13,7 +13,7 @@ HISTORY_FIELDS = {
     "id", "environment", "sourceCommit", "imageName", "imageTag", "imageDigest",
     "trigger", "actor", "status", "createdAt", "activeAt", "healthCheckResult",
     "failureReason", "credentialSetId", "credentialSetVersion", "secretSetId",
-    "secretSetVersion", "actions",
+    "secretSetVersion", "canRollback", "canRedeploy", "canCancel",
 }
 
 
@@ -31,11 +31,18 @@ def _safe_history(payload: dict[str, Any]) -> dict[str, Any]:
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def get_project_deployment_history(project_slug: str, environment: str = "production") -> str:
+    async def get_project_deployment_history(
+        project_slug: str,
+        environment: str = "production",
+        service_id: str = "",
+    ) -> str:
         """Read project deployment history and credential/secret version references only; no logs or values."""
         try:
             slug = quote(project_slug, safe="")
-            data = await gk.aget(f"/admin/projects/{slug}/deployments/history", {"environment": environment})
+            params: dict[str, Any] = {"environment": environment}
+            if service_id:
+                params["serviceId"] = service_id
+            data = await gk.aget(f"/admin/projects/{slug}/deployments/history", params)
             return ok(_safe_history(data))
         except Exception as e:
             return err(e)
@@ -53,33 +60,16 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def create_deployment(
-        repository: str,
-        image_name: str,
-        project_slug: str,
-        git_ref: str = "main",
-        image_tag: str = "latest",
-        registry: str = "docker.io",
-        container_name: str | None = None,
-        host_port: int | None = None,
-        container_port: int | None = None,
-        network: str = "bridge",
-        restart_policy: str = "unless-stopped",
+        project_id: str,
+        service_id: str | None = None,
     ) -> str:
-        """Queue a project-linked deployment. Secret values are not accepted by this tool."""
+        """Queue a deployment from saved desired configuration; configure it first if needed."""
         try:
-            body: dict[str, Any] = {
-                "repository": repository, "gitRef": git_ref, "imageName": image_name,
-                "imageTag": image_tag, "registry": registry, "restartPolicy": restart_policy,
-                "network": network, "projectSlug": project_slug,
-            }
-            if container_name:
-                body["containerName"] = container_name
-            if host_port is not None:
-                body["hostPort"] = host_port
-            if container_port is not None:
-                body["containerPort"] = container_port
-            response = await gk.apost("/admin/deployments", body)
-            return ok({key: response.get(key) for key in ("id", "environment", "status")})
+            path = f"/admin/project-setup/projects/{quote(project_id, safe='')}/deploy"
+            if service_id:
+                path += f"?serviceId={quote(service_id, safe='')}"
+            response = await gk.apost(path)
+            return ok({key: response.get(key) for key in ("deploymentId", "status")})
         except Exception as e:
             return err(e)
 
