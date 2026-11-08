@@ -11,24 +11,12 @@ from mcp.server.fastmcp import FastMCP
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def create_project_setup(
-        name: str,
-        customer_id: str,
-        domain: str | None = None,
-        project_type: str = "frontend",
-        amount_due: float | None = None,
-        currency: str = "KES",
-        due_date: str | None = None,
-        grace_period_days: int | None = None,
-    ) -> str:
-        """Create a project; Gatekeeperd generates its slug. Domain and billing fields are optional."""
+    async def search_gatekeeperd(query: str) -> str:
+        """Search customers, projects, services, and domain bindings/configs across Gatekeeperd."""
+        if not query.strip():
+            return err(ValueError("query must not be empty"))
         try:
-            body: dict[str, Any] = {"name": name, "customerId": customer_id, "type": project_type, "currency": currency}
-            if domain: body["domain"] = domain
-            if amount_due is not None: body["amountDue"] = amount_due
-            if due_date: body["dueDate"] = due_date
-            if grace_period_days is not None: body["gracePeriodDays"] = grace_period_days
-            return ok(await gk.apost("/admin/project-setup/projects", body))
+            return ok(await gk.aget("/admin/search", {"q": query.strip()}))
         except Exception as e:
             return err(e)
 
@@ -67,10 +55,13 @@ def register(mcp: FastMCP) -> None:
             return err(e)
 
     @mcp.tool()
-    async def deploy_project_setup(project_id: str) -> str:
+    async def deploy_project_setup(project_id: str, service_id: str = "") -> str:
         """Queue deployment from the project's saved source/runtime configuration."""
         try:
-            response = await gk.apost(f"/admin/project-setup/projects/{quote(project_id, safe='')}/deploy")
+            path = f"/admin/project-setup/projects/{quote(project_id, safe='')}/deploy"
+            if service_id:
+                path += f"?serviceId={quote(service_id, safe='')}"
+            response = await gk.apost(path)
             return ok({key: response.get(key) for key in ("deploymentId", "status")})
         except Exception as e:
             return err(e)
@@ -114,62 +105,20 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def create_project(
-        slug: str,
         name: str,
-        domain: str,
-        container_name: str,
-        project_type: str,
+        customer_id: str = "",
         amount_due: float | None = None,
         currency: str = "KES",
         due_date: str | None = None,
         grace_period_days: int = 3,
-        deployment_mode: str = "developer_hosted",
-        service_mode: str = "development",
-        customer_id: str | None = None,
-        new_customer_name: str | None = None,
-        new_customer_email: str | None = None,
-        new_customer_phone: str | None = None,
-        billing_name: str | None = None,
-        billing_email: str | None = None,
-        billing_address: str | None = None,
     ) -> str:
-        """
-        Register a new project in Gatekeeperd. The Docker container must already exist.
-
-        slug: unique lowercase identifier e.g. 'acme-corp'
-        name: display name
-        domain: client site domain e.g. 'acme.com'
-        container_name: Docker container name or 'name:port' e.g. 'acme-app:9921'
-        project_type: 'frontend' or 'backend'
-        amount_due: total invoice amount (optional)
-        currency: ISO currency code, default KES
-        due_date: YYYY-MM-DD (optional)
-        grace_period_days: auto-block grace window after due date (default 3)
-        deployment_mode: 'developer_hosted' | 'client_hosted' | 'external_hosted'
-        service_mode: 'development' | 'testing' | 'production'
-        customer_id: UUID of an existing customer (mutually exclusive with new_customer_*)
-        new_customer_name/email/phone: create a new customer inline (optional)
-        billing_name/email/address: billing contact overrides (optional)
-        """
+        """Create a project using the current setup API; Gatekeeperd generates its slug."""
         try:
-            body: dict[str, Any] = {
-                "slug": slug, "name": name, "domain": domain,
-                "containerName": container_name, "type": project_type,
-                "currency": currency, "gracePeriodDays": grace_period_days,
-                "deploymentMode": deployment_mode, "serviceMode": service_mode,
-            }
+            body: dict[str, Any] = {"name": name, "currency": currency, "gracePeriodDays": grace_period_days}
+            if customer_id: body["customerId"] = customer_id
             if amount_due is not None: body["amountDue"] = amount_due
             if due_date: body["dueDate"] = due_date
-            if customer_id: body["customerId"] = customer_id
-            if new_customer_name:
-                nc: dict[str, Any] = {"name": new_customer_name}
-                if new_customer_email: nc["contactEmail"] = new_customer_email
-                if new_customer_phone: nc["contactPhone"] = new_customer_phone
-                body["newCustomer"] = nc
-            if billing_name: body["billingName"] = billing_name
-            if billing_email: body["billingEmail"] = billing_email
-            if billing_address: body["billingAddress"] = billing_address
-            return ok(await gk.apost("/admin/projects", body))
+            return ok(await gk.apost("/admin/project-setup/projects", body))
         except Exception as e:
             return err(e)
 
@@ -322,38 +271,55 @@ def register(mcp: FastMCP) -> None:
             return err(e)
 
     @mcp.tool()
+    async def add_service_adjustment(project_id: str, service_id: str, adjustment_type: str, amount: float, reason: str) -> str:
+        """Add an additional charge or discount to one service's billing ledger."""
+        if amount <= 0:
+            return err(ValueError("amount must be a positive number"))
+        if adjustment_type not in ("ADDITIONAL_CHARGE", "DISCOUNT"):
+            return err(ValueError("adjustment_type must be 'ADDITIONAL_CHARGE' or 'DISCOUNT'"))
+        try:
+            return ok(await gk.apost(f"/admin/projects/{project_id}/services/{service_id}/adjustments", {
+                "type": adjustment_type, "amount": amount, "reason": reason,
+            }))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
     async def update_deployment_source(
-        slug: str,
+        project_id: str,
+        image_name: str,
         repository: str | None = None,
         git_ref: str = "main",
-        image_name: str | None = None,
         image_tag: str = "latest",
-        auto_deploy: bool = False,
+        environment: str = "production",
+        network: str = "bridge",
+        restart_policy: str = "unless-stopped",
     ) -> str:
         """
-        Configure the GitHub/Docker deployment source for auto-redeployment on push events.
+        Save the project's image/runtime source using its UUID.
         repository: 'owner/repo' format (optional)
         git_ref: branch or tag e.g. 'main'
         image_name: Docker image name e.g. 'myorg/myapp'
         image_tag: Docker image tag e.g. 'latest'
-        auto_deploy: whether to redeploy automatically on GitHub push events
+        environment: deployment environment
         """
         try:
-            body: dict[str, Any] = {"gitRef": git_ref, "imageTag": image_tag, "autoDeploy": auto_deploy}
-            if repository: body["repository"] = repository
-            if image_name: body["imageName"] = image_name
-            return ok(await gk.apatch(f"/admin/projects/{slug}/deployment-source", body))
+            body: dict[str, Any] = {
+                "repository": repository, "gitRef": git_ref, "registry": "docker.io",
+                "imageName": image_name, "imageTag": image_tag, "network": network,
+                "restartPolicy": restart_policy, "environment": environment,
+            }
+            return ok(await gk.aput(f"/admin/project-setup/projects/{quote(project_id, safe='')}/source-runtime", body))
         except Exception as e:
             return err(e)
 
     @mcp.tool()
     async def get_project_wizard_context() -> str:
         """
-        Get wizard helper context for creating a new project: running Docker containers
-        with suggested slugs and all existing project slugs to avoid collisions.
+        List containers available during project setup.
         """
         try:
-            return ok(await gk.aget("/admin/projects/wizard/context"))
+            return ok(await gk.aget("/admin/project-setup/containers"))
         except Exception as e:
             return err(e)
 

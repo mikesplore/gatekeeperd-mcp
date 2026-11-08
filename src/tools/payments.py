@@ -10,9 +10,9 @@ from mcp.server.fastmcp import FastMCP
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def initialize_payment(slug: str, email: str | None = None, amount: float | None = None) -> str:
+    async def initialize_payment(slug: str, service_id: str, email: str | None = None, amount: float | None = None) -> str:
         """
-        Generate a Paystack payment link for a project.
+        Generate a Paystack payment link for a project's service.
         Returns a payment_link URL to send to the client.
         email: override the project's customer email (optional)
         amount: partial payment amount (optional, defaults to full outstanding balance)
@@ -22,13 +22,13 @@ def register(mcp: FastMCP) -> None:
             body: dict[str, Any] = {}
             if email: body["email"] = email
             if amount is not None: body["amount"] = amount
-            return ok(await gk.apost(f"/admin/projects/{slug}/payment/initialize", body))
+            return ok(await gk.apost(f"/admin/projects/{slug}/services/{service_id}/payment/initialize", body))
         except Exception as e:
             return err(e)
 
     @mcp.tool()
     async def record_cash_payment(
-        slug: str,
+        service_id: str,
         amount: float,
         currency: str | None = None,
         paid_at: str | None = None,
@@ -48,7 +48,7 @@ def register(mcp: FastMCP) -> None:
             if paid_at: body["paidAt"] = paid_at
             if receipt_number: body["receiptNumber"] = receipt_number
             if notes: body["notes"] = notes
-            return ok(await gk.apost(f"/admin/projects/{slug}/payments/cash", body))
+            return ok(await gk.apost(f"/admin/services/{service_id}/payments/cash", body))
         except Exception as e:
             return err(e)
 
@@ -78,10 +78,13 @@ def register(mcp: FastMCP) -> None:
             return err(e)
 
     @mcp.tool()
-    async def list_project_payments(slug: str, limit: int = 25, offset: int = 0) -> str:
-        """List paginated payment history for a specific project."""
+    async def list_project_payments(project_id: str, service_id: str = "", limit: int = 25, offset: int = 0) -> str:
+        """List paginated payments by project UUID, optionally scoped to a service UUID."""
         try:
-            return ok(await gk.aget(f"/admin/projects/{slug}/payments", {"limit": limit, "offset": offset}))
+            path = f"/admin/projects/{project_id}/payments"
+            if service_id:
+                path += f"/services/{service_id}/payments"
+            return ok(await gk.aget(path, {"limit": limit, "offset": offset}))
         except Exception as e:
             return err(e)
 

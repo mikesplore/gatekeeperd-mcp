@@ -23,31 +23,18 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def enable_nginx_site(
-        slug: str,
-        port: int | None = None,
-        upstream_scheme: str | None = None,
-        certificate_domain: str | None = None,
-        ssl_cert_path: str | None = None,
-        ssl_key_path: str | None = None,
+        service_id: str,
+        domain: str,
+        domain_binding_id: str,
         require_ssl: bool = False,
     ) -> str:
         """
-        Generate and enable an nginx reverse-proxy config for a project.
-        The project's Docker container must be running.
-        port: upstream port (inferred from containerName 'name:port' if omitted)
-        upstream_scheme: 'http' or 'https' (auto-inferred if omitted)
-        certificate_domain: Let's Encrypt domain for SSL e.g. 'example.com'
-        ssl_cert_path/ssl_key_path: explicit cert file paths (override all other SSL selection)
-        require_ssl: fail if no certificate is found (default False — enables HTTP fallback)
+        Enable Nginx for a saved service domain binding. Use the binding ID returned by
+        the service domains API; service_id, domain, and domain_binding_id must match.
         """
         try:
-            body: dict[str, Any] = {"requireSsl": require_ssl}
-            if port is not None: body["port"] = port
-            if upstream_scheme: body["upstreamScheme"] = upstream_scheme
-            if certificate_domain: body["certificateDomain"] = certificate_domain
-            if ssl_cert_path: body["sslCertificatePath"] = ssl_cert_path
-            if ssl_key_path: body["sslCertificateKeyPath"] = ssl_key_path
-            return ok(await gk.apost(f"/admin/nginx/enable/{slug}", body))
+            body = {"serviceId": service_id, "domain": domain, "domainBindingId": domain_binding_id, "requireSsl": require_ssl}
+            return ok(await gk.apost("/admin/nginx/enable", body))
         except Exception as e:
             return err(e)
 
@@ -63,7 +50,8 @@ def register(mcp: FastMCP) -> None:
     async def remove_nginx_site(slug: str) -> str:
         """Completely remove an nginx site config (sites-available file and sites-enabled symlink)."""
         try:
-            return ok(await gk.apost(f"/admin/nginx/remove/{slug}"))
+            status = await gk.adelete(f"/admin/dashboard/sites/{quote(slug, safe='')}")
+            return ok({"removed": 200 <= status < 300, "status_code": status})
         except Exception as e:
             return err(e)
 
@@ -106,13 +94,14 @@ def register(mcp: FastMCP) -> None:
             return err(e)
 
     @mcp.tool()
-    async def get_nginx_wizard_context(slug: str) -> str:
+    async def get_nginx_wizard_context(slug: str, service_id: str = "") -> str:
         """
         Get nginx wizard context for a project: container hints, published ports,
         installed certificates, and current nginx/SSL state. Use before enable_nginx_site.
         """
         try:
-            return ok(await gk.aget(f"/admin/nginx/wizard/context/{slug}"))
+            params = {"serviceId": service_id} if service_id else None
+            return ok(await gk.aget(f"/admin/nginx/wizard/context/{quote(slug, safe='')}", params))
         except Exception as e:
             return err(e)
 

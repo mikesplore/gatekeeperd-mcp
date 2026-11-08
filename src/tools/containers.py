@@ -203,3 +203,61 @@ def register(mcp: FastMCP) -> None:
             return ok(await gk.aget("/admin/networks"))
         except Exception as e:
             return err(e)
+
+    @mcp.tool()
+    async def list_volumes(search: str = "", limit: int = 100, offset: int = 0) -> str:
+        """List Docker volumes, including attached containers and usage information."""
+        try:
+            params: dict[str, Any] = {"limit": limit, "offset": offset}
+            if search: params["q"] = search
+            return ok(await gk.aget("/admin/volumes", params))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def create_volume(name: str, driver: str = "local") -> str:
+        """Create a named Docker volume."""
+        try:
+            return ok(await gk.apost("/admin/volumes", {"name": name, "driver": driver}))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def delete_volume(name: str) -> str:
+        """Delete an unused Docker volume by name."""
+        try:
+            return ok(await gk.adelete(f"/admin/volumes/{name}"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def prune_volumes() -> str:
+        """Remove unused Docker volumes; Docker/Gatekeeperd protects volumes that are in use."""
+        try:
+            return ok(await gk.apost("/admin/volumes/prune"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def create_network(name: str, driver: str = "bridge") -> str:
+        """Create a Docker network."""
+        try:
+            return ok(await gk.apost("/admin/networks", {"name": name, "driver": driver}))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def delete_network(name: str) -> str:
+        """Delete an unused Docker network by name."""
+        try:
+            return ok(await gk.adelete(f"/admin/networks/{name}"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def prune_networks() -> str:
+        """Remove unused Docker networks."""
+        try:
+            return ok(await gk.apost("/admin/networks/prune"))
+        except Exception as e:
+            return err(e)

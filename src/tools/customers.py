@@ -13,7 +13,7 @@ def register(mcp: FastMCP) -> None:
     async def list_customers() -> str:
         """List all customers registered in Gatekeeperd."""
         try:
-            return ok(await gk.aget("/admin/customers"))
+            return ok(await gk.aget("/admin/dashboard/customers"))
         except Exception as e:
             return err(e)
 
@@ -21,27 +21,48 @@ def register(mcp: FastMCP) -> None:
     async def get_customer(customer_id: str) -> str:
         """Get a single customer by their UUID."""
         try:
-            return ok(await gk.aget(f"/admin/customers/{customer_id}"))
+            return ok(await gk.aget(f"/admin/dashboard/customers/{customer_id}"))
         except Exception as e:
             return err(e)
 
     @mcp.tool()
     async def create_customer(
-        name: str,
+        first_name: str,
+        last_name: str,
         contact_email: str | None = None,
         contact_phone: str | None = None,
     ) -> str:
         """
         Create a new customer record.
-        name: customer or company name
+        first_name/last_name: customer name
         contact_email: primary email (optional)
         contact_phone: primary phone number (optional)
         """
         try:
-            body: dict[str, Any] = {"name": name}
+            body: dict[str, Any] = {"firstName": first_name, "lastName": last_name}
             if contact_email: body["contactEmail"] = contact_email
             if contact_phone: body["contactPhone"] = contact_phone
             return ok(await gk.apost("/admin/dashboard/customers", body))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def update_customer(customer_id: str, first_name: str, last_name: str, contact_email: str | None = None, contact_phone: str | None = None) -> str:
+        """Update a customer's name and contact details."""
+        try:
+            body: dict[str, Any] = {"firstName": first_name, "lastName": last_name}
+            if contact_email is not None: body["contactEmail"] = contact_email
+            if contact_phone is not None: body["contactPhone"] = contact_phone
+            return ok(await gk.aput(f"/admin/dashboard/customers/{customer_id}", body))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def delete_customer(customer_id: str) -> str:
+        """Delete a customer who has no assigned projects."""
+        try:
+            status = await gk.adelete(f"/admin/dashboard/customers/{customer_id}")
+            return ok({"deleted": 200 <= status < 300, "status_code": status})
         except Exception as e:
             return err(e)
 
