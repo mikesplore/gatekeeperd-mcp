@@ -13,11 +13,26 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def get_nginx_status(slug: str) -> str:
         """
-        Check nginx status for a project: enabled state, config path, port,
-        SSL enabled, and certificate domain.
+        Check a site's current Nginx and deployment connection state. Accepts a site slug or domain.
         """
         try:
-            return ok(await gk.aget(f"/admin/nginx/status/{slug}"))
+            return ok(await gk.aget(f"/admin/dashboard/sites/{quote(slug, safe='')}"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def get_nginx_upstream_migration() -> str:
+        """List Nginx sites and whether each can connect to an active production deployment."""
+        try:
+            return ok(await gk.aget("/admin/nginx/upstream-migration"))
+        except Exception as e:
+            return err(e)
+
+    @mcp.tool()
+    async def connect_nginx_site_to_production(site_id: str) -> str:
+        """Connect a site's Nginx upstream to its active production deployment."""
+        try:
+            return ok(await gk.apost(f"/admin/nginx/upstream-migration/sites/{quote(site_id, safe='')}"))
         except Exception as e:
             return err(e)
 
